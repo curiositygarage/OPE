@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# OPE runtime artifacts (created in the served directory)
+changes.md
+*.bak
+*~
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
