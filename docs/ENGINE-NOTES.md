@@ -137,8 +137,12 @@ which this server never answers.
 ```python
 def do_POST(self):
     fname = (parse_qs(urlparse(self.path).query).get('file') or ['index.html'])[0]
-    target = os.path.normpath(os.path.join(BASE, fname))
-    if not target.startswith(BASE) or os.path.splitext(target)[1] not in ('.html', '.htm'):
+    target = os.path.realpath(os.path.join(BASE, fname))
+    # A plain target.startswith(BASE) is UNSAFE: a sibling directory whose NAME
+    # merely prefixes BASE (".../ope-evil" vs ".../ope") passes it, and the write
+    # escapes the project directory. Compare real paths on a path-component
+    # boundary instead. (The normpath/startswith form above is the pre-release bug.)
+    if os.path.commonpath([BASE, target]) != BASE or os.path.splitext(target)[1] not in ('.html', '.htm'):
         self._send(403, 'forbidden'); return
     # …read body, parse JSON if applicable…
     cur_ver = opever(open(target,'rb').read()) if os.path.exists(target) else 0
@@ -157,7 +161,9 @@ def do_POST(self):
   (409). Prevents an old tab from clobbering newer edits.
 - **Auto-bump:** after a successful save the marker is bumped to `cur_ver + 1`, so every
   other open tab is now stale and will 409 on its next save.
-- **Backup:** `.bak` of the previous file is written before every save.
+- **Backup:** a save that overwrites an existing file copies the previous version to
+  `<page>.bak` first. A first save of a *new* file has nothing to back up, so no `.bak` appears
+  until its second save.
 - **Change log:** appends to `changes.md`:
 
   ```

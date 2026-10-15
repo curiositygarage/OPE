@@ -416,6 +416,13 @@ OPE is built for **local / trusted editing**, not hostile public hosting.
   no `Sec-Fetch-Site` saves normally. That is the intended non-browser save path, not a gap — a web
   page cannot reach it.
 
+  Note which check is load-bearing. The `Sec-Fetch-Site: cross-site` refusal is **defence in depth
+  and is fail-open when the header is absent** — a JSON POST with no `Sec-Fetch-Site` is accepted
+  (200). The wall that actually stops a drive-by is the preflight: `application/json` is not a
+  CORS-simple type, and `OPTIONS` is answered `501 Unsupported method` with **no** `Access-Control-*`
+  headers at all, so a cross-origin page cannot complete the preflight to send the JSON body in the
+  first place.
+
   This guard is regression-tested:
 
   ```bash
@@ -450,8 +457,10 @@ OPE is built for **local / trusted editing**, not hostile public hosting.
   `left` / `top` on the element. Perfect for static pages; it is not a layout engine.
 - **One editor per page.** The toolbar is injected at runtime and is never written into
   the saved HTML.
-- **`.bak` recovery.** Every save copies the previous file to `<page>.bak`. If a save goes
-  wrong, restore the `.bak` — or read `changes.md` to see exactly what changed.
+- **`.bak` recovery.** Every save that overwrites an existing page copies the previous version to
+  `<page>.bak` first (a first save of a *new* page has nothing to back up, so no `.bak` appears
+  until its second save). If a save goes wrong, restore the `.bak` — or read `changes.md` to see
+  exactly what changed.
 
 ---
 
