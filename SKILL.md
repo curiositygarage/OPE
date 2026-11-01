@@ -12,7 +12,10 @@ the corner: click it, drag blocks to new positions, rewrite wording inline, save
 disk is the single source of truth and the only thing written.
 
 OPE is not an application. No database, no accounts, no admin panel, no config format, no plugin
-ecosystem, no build, no dependencies. Delete the two files and the page is exactly as it was.
+ecosystem, no build, no dependencies. Nothing to install and nothing to uninstall: delete the two
+files and the server is gone. What a session *does* leave behind in the served directory is the
+`<!-- ope-ver: N -->` marker in the pages it saved, a `<page>.bak` per saved page, and
+`changes.md` — plain files you can read, diff or delete on their own.
 
 ## Use this when
 
@@ -54,7 +57,9 @@ Python 3.9+ standard library only; no pip install, no npm install.
     page: 'index.html',                 // filename the save posts back to
     draggable: ['.card', '.panel'],     // blocks that may be reordered
     editable: ['.title', '.body'],      // text blocks that may be rewritten inline
-    svg: true                           // enable dragging SVG groups carrying [data-mi]
+    svg: true                           // drag SVG groups carrying [data-mi] — needs a
+                                        // canvas <svg class="tl-svg">; handles <circle>,
+                                        // <text>, <line> children only
   };
 </script>
 ```
@@ -64,15 +69,32 @@ keep a page's structure honest while still letting its owner rearrange it.
 
 ## How a save works
 
-`POST /save?file=<page>` with a JSON body `{html, ope_ver, changes, page}`:
+`POST /save?file=<page>` with a JSON body `{html, changes, page}`:
 
 - The path must resolve inside the served directory, checked on a path-component boundary, so a
   sibling directory whose name merely prefixes the served one cannot be written to.
 - Only `.html` / `.htm` targets are writable.
-- A tab carrying a stale `ope_ver` is rejected with **HTTP 409** rather than overwriting newer edits.
-- The current file is copied to `<page>.bak` before the write.
-- An entry is appended to `changes.md`: what moved, what text changed, before and after.
+- **The current file is copied to `<page>.bak` before the write.**
+- An entry is appended to `changes.md`: what moved, what text changed, before and after. A save
+  carrying an empty `changes` list writes no entry — there is nothing to record.
 - `OPE_NOTIFY_DIR` (optional environment variable) drops a JSON notification after each save.
+
+### The stale-tab guard, and the marker it depends on
+
+A save is rejected with **HTTP 409** when the incoming `html` carries a **lower**
+`<!-- ope-ver: N -->` marker than the file on disk — a stale tab cannot overwrite newer edits.
+
+The version lives **only** in that comment inside `html`. An `ope_ver` field in the JSON body is
+accepted and then ignored; it can never save you. Two consequences:
+
+- **The server arms the guard itself.** A page with no marker is written with
+  `<!-- ope-ver: 1 -->` (placed after the doctype, so it cannot force quirks mode) and the save
+  reports `"marker_inserted": true`. From the *next* save on, a marker-less tab — an old tab, a
+  page regenerated from a template that dropped the comment — reads as `v0` and gets a 409.
+  So add the marker if you like, but an omission is no longer a silent hole.
+- **Bumps never go backwards.** The version written is `max(tab, disk) + 1`, so a page replaced
+  from outside the editor is not silently downgraded by the next save. Trust the `version` the
+  server returns, not the number you sent.
 
 ## Security model, stated plainly
 

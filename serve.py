@@ -47,6 +47,35 @@ NOTIFY_DIR = os.environ.get('OPE_NOTIFY_DIR') or None
 MAX_BODY = 32 * 1024 * 1024   # a page edit is kBs; 32 MB is a ceiling, not a target
 SOCK_TIMEOUT = 30             # per-connection, so an unbounded read cannot park a thread forever
 
+# The stale-tab guard can only compare versions it can see, and the only version a page carries
+# is this comment. A page without one reads as v0 forever, so cur_ver == new_ver == 0 and every
+# stale tab is accepted -- the guard would be advertised in SKILL.md and inert in fact.
+# So the first save on a marker-less page stamps the marker itself: the guard arms on write.
+MARKER_RE = re.compile(rb'<!--\s*ope-ver:\s*(\d+)\s*-->')
+DOCTYPE_RE = re.compile(rb'\s*<!doctype[^>]*>', re.IGNORECASE)
+
+
+def opever(blob):
+    """Version carried by the page's <!-- ope-ver: N --> marker; 0 when there is none."""
+    m = MARKER_RE.search(blob)
+    return int(m.group(1)) if m else 0
+
+
+def stamp_marker(blob, version):
+    """Return `blob` carrying <!-- ope-ver: version -->, inserting the marker if absent.
+
+    An insert goes AFTER the doctype, never before it: a comment above <!DOCTYPE> can drop the
+    page into quirks mode. A page with no doctype gets the marker prepended.
+    """
+    marker = b'<!-- ope-ver: %d -->' % version
+    if MARKER_RE.search(blob):
+        return MARKER_RE.sub(marker, blob, count=1)
+    m = DOCTYPE_RE.match(blob)
+    if m:
+        return blob[:m.end()] + b'\n' + marker + blob[m.end():]
+    return marker + b'\n' + blob
+
+
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get('OPE_PORT', '8899'))
 HOST = sys.argv[2] if len(sys.argv) > 2 else os.environ.get('OPE_HOST', '127.0.0.1')
 
@@ -116,7 +145,7 @@ class H(http.server.SimpleHTTPRequestHandler):
         try:
             j = json.loads(body.decode('utf-8'))
         except Exception:
-            self._send(400, 'body must be a JSON object {html, ope_ver, changes, page}')
+            self._send(400, 'body must be a JSON object {html, changes, page} (an ope_ver field is accepted and ignored)')
             return
         if not isinstance(j.get('html'), str):
             self._send(400, 'json body must carry an "html" string')
@@ -125,30 +154,30 @@ class H(http.server.SimpleHTTPRequestHandler):
         changes = j.get('changes') or []
         page = j.get('page') or fname
 
-        def opever(b):
-            m = re.search(rb'<!--\s*ope-ver:\s*(\d+)\s*-->', b)
-            return int(m.group(1)) if m else 0
-
         cur_ver = opever(open(target, 'rb').read()) if os.path.exists(target) else 0
         new_ver = opever(data)
         if new_ver < cur_ver:
             self._send(409, f'STALE SAVE REJECTED (tab is v{new_ver}, disk is v{cur_ver}) — hard-refresh the page (Ctrl+Shift+R) then save again')
             return
 
-        # Auto-bump version marker so stale tabs always 409 after this save
-        bumped = re.sub(rb'<!--\s*ope-ver:\s*\d+\s*-->', f'<!-- ope-ver: {cur_ver + 1} -->'.encode(), data, count=1)
+        # Auto-bump version marker so stale tabs always 409 after this save.
+        # next = max(cur, new) + 1: a tab that carries a HIGHER marker than disk (page was
+        # replaced from outside) must not be silently downgraded to cur+1.
+        next_ver = max(cur_ver, new_ver) + 1
+        bumped = stamp_marker(data, next_ver)
         if os.path.exists(target):
             shutil.copy(target, target + '.bak')
         with open(target, 'wb') as f:
             f.write(bumped)
 
         # Write change log (append-only)
-        self._log_changes(page, cur_ver, cur_ver + 1, changes)
+        self._log_changes(page, cur_ver, next_ver, changes)
 
         # Optional external notification (inbox / sync folder)
-        self._notify(page, cur_ver + 1, changes)
+        self._notify(page, next_ver, changes)
 
-        self._send(200, json.dumps({'ok': True, 'file': fname, 'version': cur_ver + 1, 'changes': len(changes)}), 'application/json')
+        self._send(200, json.dumps({'ok': True, 'file': fname, 'version': next_ver, 'changes': len(changes),
+                                    'marker_inserted': MARKER_RE.search(data) is None}), 'application/json')
 
     def _log_changes(self, page, old_ver, new_ver, changes):
         if not changes:

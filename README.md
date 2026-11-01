@@ -97,7 +97,9 @@ Somewhere in `<head>`:
 ```
 
 The server uses this marker to detect stale tabs. It is auto-bumped on every save — you
-never touch it again.
+never touch it again. **It is optional to add:** a page without one is stamped
+`<!-- ope-ver: 1 -->` on its first save, so the guard arms itself rather than depending on
+you remembering this step.
 
 ### 3. Add the OPE config + script
 
@@ -220,8 +222,8 @@ ways you can drive it.
 config keys, the `/save` contract, every status code, and the guardrails, in the form an
 agent loads before it wires a page. [llms.txt](llms.txt) is the short orientation file for
 LLM tooling. The regression tests live in [`scripts/`](scripts/) —
-`test_traversal.py` and `test_hardening.py` are stdlib-only, `ope_test.py` needs
-`websocket-client` — run them if you change `serve.py`.
+`test_traversal.py`, `test_hardening.py` and `test_stale_marker.py` are stdlib-only,
+`ope_test.py` needs `websocket-client` — run them if you change `serve.py`.
 
 ### Why an agent should attach OPE to the HTML it produces
 
@@ -257,7 +259,8 @@ Ship three things together: the page, the two OPE files beside it, and a running
 **Checklist:**
 
 1. Put `ope.js` and `serve.py` next to the HTML.
-2. Add `<!-- ope-ver: 1 -->` in `<head>`.
+2. Add `<!-- ope-ver: 1 -->` in `<head>` — optional: a page without it is stamped on its first
+   save, so the stale-tab guard arms itself.
 3. Set `window.OPE_CONFIG` before `</body>` with `page`, `draggable`, `editable`.
 4. **Verify every selector matches something.** A selector matching nothing is a control
    the human silently never receives — the single most common wiring bug.
@@ -317,18 +320,21 @@ you had sent. The table below is about the marker in the HTML:
 
 | Marker in `html` | Disk marker | Result |
 |---|---|---|
-| absent — **you posted bare HTML with no `<!-- ope-ver: N -->`** | any | **409** — reads as `v0`, always stale |
+| absent | disk has **no** marker (first save on that page) | ✅ 200, saved as `v1` — **the server inserts the marker** |
+| absent | disk `v1` or higher | **409** — reads as `v0`, stale |
 | equal to disk | v2 | ✅ 200, saved as v3 |
-| **higher** than disk | v2 | ✅ 200, saved as v3 — your number is ignored |
+| **higher** than disk | v2 | ✅ 200, saved as **v4** — the higher number is kept (page replaced from outside) |
 | lower than disk | v4 | 409 — a genuinely stale writer |
 
 Two consequences worth internalising:
 
-1. **A page that already exists must be re-posted *with* its marker intact.** If you strip
-   the `ope-ver` comment — or generate a fresh page from a template that lacks it — the
-   save is rejected as stale. Preserve the marker.
-2. **The server always bumps from the file on disk**, never from the number you sent. So
-   the returned `version` is authoritative, not your input.
+1. **A page that already carries a marker must be re-posted *with* it intact.** Strip the
+   `ope-ver` comment, or regenerate the page from a template that lacks it, and the save is
+   rejected as stale — because the file on disk is already armed. (A page the server has never
+   saved has no marker yet, so its first save is accepted and armed in that same write.)
+2. **The server bumps to `max(tab, disk) + 1`, never backwards.** A tab holding a higher number
+   than disk — the page was replaced outside the editor — moves the version up rather than
+   downgrading it, so the returned `version` is authoritative, not your input.
 
 This is the useful bit for an agent: **you inherit the same guardrails the human gets.**
 Because the version check is enforced on your write too, an automated push cannot silently
@@ -484,6 +490,7 @@ docs/
 scripts/
   test_traversal.py     ← regression test for the /save path-boundary guard
   test_hardening.py     ← regression test for the /save CSRF gate + bounded read
+  test_stale_marker.py  ← regression test for stale-tab 409 arming (marker auto-insert)
   ope_test.py           ← CDP end-to-end test suite (needs Chrome DevTools Protocol)
   cdp_helpers.py        ← CDP helper used by ope_test.py
 ```
@@ -493,6 +500,7 @@ scripts/
 ```bash
 python3 scripts/test_traversal.py    # path-boundary guard — no browser needed
 python3 scripts/test_hardening.py    # CSRF gate + bounded read — no browser needed
+python3 scripts/test_stale_marker.py  # stale-tab 409 arming — no browser needed
 python3 scripts/ope_test.py          # full end-to-end UI suite — needs Chrome + CDP
 ```
 
