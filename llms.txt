@@ -1,0 +1,35 @@
+# OPE — On-Page Editor
+
+> A tiny, zero-dependency editing layer you attach to a plain HTML page so the person who cares
+> about how it looks can drag blocks and rewrite copy themselves, saved straight back to the file.
+> No CMS, no build step, no framework, no developer in the loop.
+
+OPE is two files (`ope.js`, `serve.py`) copied beside an HTML page plus one `<script>` tag. Opening
+the page through the bundled server adds an Edit Mode pill; edits are written to the HTML file on
+disk with a `.bak` backup and an append-only `changes.md` log. It is a capability, not an
+application: no database, no accounts, no dependencies, no install step, nothing to host.
+
+Canonical source: https://github.com/curiositygarage/OPE
+
+## Docs
+
+- [README](https://github.com/curiositygarage/OPE/blob/main/README.md): what OPE is and is not, full feature list, build and usage notes.
+- [Skill manifest](https://github.com/curiositygarage/OPE/blob/main/SKILL.md): agent-facing install, configuration, save semantics, security model and pitfalls.
+- [Design notes](https://github.com/curiositygarage/OPE/blob/main/docs/DESIGN-NOTES.md): why the editing model is the shape it is.
+- [Engine notes](https://github.com/curiositygarage/OPE/blob/main/docs/ENGINE-NOTES.md): internals of the shared editing engine.
+
+## Files
+
+- [ope.js](https://github.com/curiositygarage/OPE/blob/main/ope.js): shared editing engine; injects toolbar, view toggle and CSS.
+- [serve.py](https://github.com/curiositygarage/OPE/blob/main/serve.py): static server plus the guarded `POST /save` endpoint.
+- [demo.html](https://github.com/curiositygarage/OPE/blob/main/demo.html): demo page exercising every editable surface.
+- [LICENSE](https://github.com/curiositygarage/OPE/blob/main/LICENSE): MIT.
+
+## Requirements
+
+Python 3.9+ standard library, and a browser. No package manager, no build, no network access.
+
+## Optional
+
+- `OPE_PORT`, `OPE_HOST`: port and bind address (defaults `8899` and `127.0.0.1`).
+- `OPE_NOTIFY_DIR`: directory to drop a JSON notification into after every save.
