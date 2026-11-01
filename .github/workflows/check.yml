@@ -1,0 +1,79 @@
+# CI — the three stdlib-only regression gates, on every push and pull request.
+#
+# What this proves: the behaviours SKILL.md and README.md advertise about `/save` — the path
+# boundary, the request hardening, and the stale-tab marker guard — still hold against the code in
+# this tree. Each script runs the real `serve.py` on a free loopback port against a throwaway copy,
+# so a green run means the shipped server was actually exercised, not imported.
+#
+# What this does NOT prove: browser behaviour. `ope.js` is not driven by a headless browser here, so
+# drag/drop, the Edit Mode pill and the SVG branch are covered only by the manual demo. `ope_test.py`
+# (which drives a real browser over CDP) is deliberately not in this job: it needs `websocket-client`
+# and a Chrome the runner would have to launch and pin.
+#
+# The self-proof step exists because a check that has only ever passed is not evidence: it breaks
+# `stamp_marker` in a scratch copy and requires `test_stale_marker.py` to FAIL. If the mutation still
+# goes green, the gate is decorative and this job fails.
+name: check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: path boundary, request hardening, stale-tab guard
+        run: |
+          python scripts/test_traversal.py
+          python scripts/test_hardening.py
+          python scripts/test_stale_marker.py
+
+  self-proof:
+    # Runs once: the point is that the gate can fail, which does not depend on the Python version.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: the stale-tab gate fails when the fix is removed
+        run: |
+          set -e
+          scratch="$(mktemp -d)"
+          mkdir -p "$scratch/scripts"
+          cp serve.py ope.js LICENSE "$scratch"/
+          # The test resolves the repo root as __file__.parent.parent, so it must stay in scripts/.
+          cp scripts/test_stale_marker.py "$scratch/scripts"/
+          # The mutation: save the page without stamping the marker. On a marker-less page that
+          # restores the original defect — every stale tab accepted, guard advertised but inert.
+          python - "$scratch/serve.py" <<'PY'
+          import sys, pathlib
+          p = pathlib.Path(sys.argv[1])
+          src = p.read_text()
+          old = "bumped = stamp_marker(data, next_ver)"
+          if src.count(old) != 1:
+              sys.exit(f"self-proof invalid: expected exactly one {old!r}, found {src.count(old)}")
+          p.write_text(src.replace(old, "bumped = data"))
+          PY
+          cd "$scratch"
+          set +e
+          out="$(python test_stale_marker.py 2>&1)"; rc=$?
+          set -e
+          printf '%s\n' "$out" | tail -20
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::mutating stamp_marker left test_stale_marker.py green — the gate proves nothing"
+            exit 1
+          fi

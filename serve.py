@@ -104,7 +104,11 @@ class H(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
-        """POST /save?file=<page> — body: JSON {html, ope_ver, changes, page}; requires Content-Type: application/json."""
+        """POST /save?file=<page> — body: JSON {html, changes, page}; requires Content-Type: application/json.
+
+        A legacy `ope_ver` field is accepted and ignored: the version being compared is the one in
+        the incoming html's <!-- ope-ver: N --> marker, never a body field.
+        """
         from urllib.parse import urlparse, parse_qs
         parsed = urlparse(self.path)
         qs = parse_qs(parsed.query)

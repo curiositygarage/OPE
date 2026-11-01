@@ -373,7 +373,7 @@ change log stops re-litigating the same copy decisions.
 
 | Behaviour | Why it matters to you |
 |---|---|
-| **Version-guarded saves** | A payload whose `ope_ver` marker is **lower** than the file's is rejected with **HTTP 409**. A tab (or an agent) holding an old copy cannot overwrite newer work. |
+| **Version-guarded saves** | A payload whose `<!-- ope-ver: N -->` marker is **lower** than the file's is rejected with **HTTP 409**. A tab (or an agent) holding an old copy cannot overwrite newer work. |
 | **`<page>.bak` on every overwrite** | The previous version is always one file away — safe to be aggressive. The first save of a *new* file has nothing to back up, so no `.bak` appears until its second save. |
 | **`changes.md` is append-only** | A durable audit trail of every edit, human or automated. |
 | **The toolbar is never written into the page** | Re-reading the file after a save gives you clean HTML — the editor UI is injected at runtime only. |
@@ -389,14 +389,19 @@ change log stops re-litigating the same copy decisions.
 3. When they say it's done, **read `changes.md` and the saved page**.
 4. Reconcile: bake their placement and copy into your next revision of the source, so the
    next page starts closer to right.
-5. If you must overwrite programmatically, send the **current** `ope_ver` so the version
-   guard protects any work in flight.
+5. If you must overwrite programmatically, carry the **current** `<!-- ope-ver: N -->` marker
+   in the `html` you send, so the version guard protects any work in flight. (The JSON
+   `ope_ver` field is ignored — the marker inside the HTML is the only version that counts.)
 
 ---
 
 ## Security notes
 
 OPE is built for **local / trusted editing**, not hostile public hosting.
+
+**Found a hole?** Use GitHub's private report form — *Security → Report a vulnerability* — rather
+than a public issue. [SECURITY.md](SECURITY.md) lists what counts as a vulnerability here, and what
+is a documented limit instead. There is no email address in it on purpose.
 
 - **Localhost by default.** `serve.py` binds `127.0.0.1` only. Nothing on your network can
   reach it unless you explicitly expose it.
