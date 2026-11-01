@@ -216,6 +216,13 @@ This section is written for an AI coding agent (or any automation) that produces
 **for a human to look at**. It covers what OPE changes about your workflow, and the two
 ways you can drive it.
 
+**Machine-readable entry points:** [SKILL.md](SKILL.md) is the agent skill manifest — the
+config keys, the `/save` contract, every status code, and the guardrails, in the form an
+agent loads before it wires a page. [llms.txt](llms.txt) is the short orientation file for
+LLM tooling. The regression tests live in [`scripts/`](scripts/) —
+`test_traversal.py` and `test_hardening.py` are stdlib-only, `ope_test.py` needs
+`websocket-client` — run them if you change `serve.py`.
+
 ### Why an agent should attach OPE to the HTML it produces
 
 An agent can generate a beautiful page, but it **cannot see the human's screen**, and it
