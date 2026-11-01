@@ -489,7 +489,7 @@ python3 scripts/test_hardening.py    # CSRF gate + bounded read — no browser n
 python3 scripts/ope_test.py          # full end-to-end UI suite — needs Chrome + CDP
 ```
 
-**Prerequisites.** The first three are stdlib-only. `ope_test.py` additionally needs
+**Prerequisites.** The first two are stdlib-only. `ope_test.py` additionally needs
 `pip install websocket-client` and a Chrome running with `--remote-debugging-port=18800` (the
 port is hardcoded in `cdp_helpers.py`); it talks to the server on `:8899` and its `PAGES` list
 targets `demo.html`, so **the server it points at must actually serve this directory** — if
