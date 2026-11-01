@@ -11,7 +11,7 @@ add one `<script>` tag, open the page through the bundled server. An **Edit Mode
 the corner: click it, drag blocks to new positions, rewrite wording inline, save. The HTML file on
 disk is the single source of truth and the only thing written.
 
-OPE is not an application. No database, no accounts, no admin panel, no config format, no plugin
+OPE is not an application. No database, no accounts, no admin panel, no config file, no plugin
 ecosystem, no build, no dependencies. Nothing to install and nothing to uninstall: delete the two
 files and the server is gone. What a session *does* leave behind in the served directory is the
 `<!-- ope-ver: N -->` marker in the pages it saved, a `<page>.bak` per saved page, and
@@ -78,6 +78,18 @@ keep a page's structure honest while still letting its owner rearrange it.
 - An entry is appended to `changes.md`: what moved, what text changed, before and after. A save
   carrying an empty `changes` list writes no entry — there is nothing to record.
 - `OPE_NOTIFY_DIR` (optional environment variable) drops a JSON notification after each save.
+
+### Every status code the server returns
+
+| Code | Meaning |
+|---|---|
+| `200` | Save accepted. Body is `{ok, file, version, changes, marker_inserted}`. |
+| `400` | The body is not a JSON object, or carries no `html` string; or `Content-Length` is malformed. |
+| `403` | The target resolves outside the served directory, is not `.html`/`.htm`, or the request is `Sec-Fetch-Site: cross-site`. |
+| `404` | The requested path is not in the served directory (the stdlib GET handler answers this one). |
+| `409` | Stale save — the incoming `html` marker is lower than the file on disk. See below. |
+| `413` | Body exceeds the size limit. |
+| `415` | `Content-Type` is not `application/json`. |
 
 ### The stale-tab guard, and the marker it depends on
 
